@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Studio - Pro Photo Booth</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .step-active { color: #2563eb; }
+        .step-inactive { color: #64748b; }
+        /* Hide scrollbar for cleaner UI */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Cropper Styles */
+        #crop-container {
+            touch-action: none;
+            user-select: none;
+        }
+        
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #2563eb;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white border-b border-slate-200 px-6 py-4 shadow-sm sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                    <i data-lucide="camera" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-none">ID Studio</h1>
+                    <p class="text-xs text-slate-500 font-medium">Pro Web Edition</p>
+                </div>
+            </div>
+            
+            <!-- Steps (Hidden on Login) -->
+            <div class="hidden sm:flex gap-6 text-sm font-medium" id="step-indicator">
+                <span id="nav-step-1" class="step-active">1. Upload</span>
+                <span id="nav-step-2" class="step-inactive">2. Crop</span>
+                <span id="nav-step-3" class="step-inactive">3. Config</span>
+                <span id="nav-step-4" class="step-inactive">4. Print</span>
+            </div>
+
+            <!-- Logout Button (Hidden on Login) -->
+            <button id="btn-logout" onclick="app.logout()" class="hidden text-sm text-slate-500 hover:text-red-600 font-medium flex items-center gap-1">
+                <i data-lucide="log-out" class="w-4 h-4"></i> Exit
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-5xl mx-auto px-6 py-10 flex-grow w-full">
+        
+        <!-- Error Message -->
+        <div id="error-box" class="hidden mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center gap-3">
+            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <p id="error-text"></p>
+        </div>
+
+        <!-- STEP 0: LOGIN -->
+        <section id="view-login" class="block max-w-md mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 text-center mt-10">
+            <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="key" class="w-8 h-8"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2">Enter Access Key</h2>
+            <p class="text-slate-500 mb-8 text-sm">Please enter your Gemini API Key to start creating professional ID photos.</p>
+            
+            <div class="space-y-4">
+                <div class="relative">
+                    <i data-lucide="lock" class="absolute left-3 top-3.5 w-5 h-5 text-slate-400"></i>
+                    <input type="password" id="api-key-input" placeholder="Paste your API Key here" class="w-full pl-10 p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all">
+                </div>
+                <button onclick="app.login()" class="w-full bg-blue-600 text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                    Start Studio <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+            
+            <div class="mt-6 text-xs text-slate-400">
+                Don't have a key? <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 hover:underline">Get one from Google AI Studio</a>
+            </div>
+        </section>
+
+        <!-- STEP 1: Upload -->
+        <section id="view-upload" class="hidden max-w-xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 text-center animate-fade-in">
+            <h2 class="text-2xl font-bold mb-2">Upload Selfie</h2>
+            <p class="text-slate-500 mb-8">Professional ID photos in seconds.</p>
+            
+            <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-10 cursor-pointer hover:bg-slate-50 transition-colors">
+                <i data-lucide="upload" class="w-12 h-12 mx-auto text-slate-400 mb-4"></i>
+                <p class="text-lg font-medium text-slate-700">Drag & drop or click to browse</p>
+                <input type="file" id="file-input" class="hidden" accept="image/*">
+            </div>
+        </section>
+
+        <!-- STEP 2: Crop -->
+        <section id="view-crop" class="hidden max-w-2xl mx-auto bg-white rounded-2xl shadow-xl p-8 border border-slate-100 text-center">
+            <h2 class="text-xl font-bold mb-4">Crop Photo</h2>
+            <p class="text-slate-500 text-sm mb-6">Drag and zoom to frame your face perfectly (Square).</p>
+            
+            <div class="flex justify-center mb-6">
+                <!-- Crop Window (320x320) -->
+                <div id="crop-container" class="relative w-80 h-80 bg-slate-900 overflow-hidden rounded-lg shadow-inner cursor-move">
+                    <img id="crop-image" src="" alt="To Crop" class="absolute max-w-none origin-center pointer-events-none select-none">
+                    
+                    <!-- Guidelines -->
+                    <div class="absolute inset-0 border-2 border-white/50 pointer-events-none"></div>
+                    <div class="absolute top-1/3 w-full h-px bg-white/30 pointer-events-none"></div>
+                    <div class="absolute top-2/3 w-full h-px bg-white/30 pointer-events-none"></div>
+                    <div class="absolute left-1/3 h-full w-px bg-white/30 pointer-events-none"></div>
+                    <div class="absolute left-2/3 h-full w-px bg-white/30 pointer-events-none"></div>
+                </div>
+            </div>
+
+            <div class="max-w-xs mx-auto mb-8 flex items-center gap-3">
+                <i data-lucide="zoom-in" class="w-4 h-4 text-slate-500"></i>
+                <input type="range" id="zoom-slider" min="0.5" max="3" step="0.1" value="1" class="range-slider w-full h-2 bg-slate-200 rounded-lg appearance-none">
+            </div>
+
+            <div class="flex gap-4 justify-center">
+                <button onclick="app.goToStep(1)" class="px-6 py-2 text-slate-600 font-medium hover:bg-slate-100 rounded-lg transition-colors">Back</button>
+                <button onclick="app.confirmCrop()" class="px-8 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg flex items-center gap-2 transition-colors">
+                    <i data-lucide="scissors" class="w-4 h-4"></i> Crop & Continue
+                </button>
+            </div>
+        </section>
+
+        <!-- STEP 3: Config -->
+        <section id="view-config" class="hidden grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+            <!-- Left: Preview of Crop -->
+            <div class="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden p-8 flex justify-center bg-slate-100">
+                <img id="cropped-preview" src="" alt="Cropped" class="max-h-80 rounded-lg shadow-md object-contain">
+            </div>
+
+            <!-- Right: Settings -->
+            <div class="flex flex-col gap-6">
+                <div class="bg-white p-6 rounded-2xl shadow-lg border border-slate-100">
+                    <h3 class="text-xl font-bold mb-6 flex items-center gap-2">
+                        <i data-lucide="settings" class="w-5 h-5"></i> Configuration
+                    </h3>
+
+                    <!-- Gender -->
+                    <div class="mb-6">
+                        <label class="text-xs font-bold uppercase text-slate-500 mb-2 block">1. Gender</label>
+                        <div class="flex gap-3">
+                            <button onclick="app.setConfig('gender', 'male')" class="btn-gender flex-1 py-3 rounded-xl border-2 font-medium capitalize border-blue-500 bg-blue-50 text-blue-700" data-val="male">Male</button>
+                            <button onclick="app.setConfig('gender', 'female')" class="btn-gender flex-1 py-3 rounded-xl border-2 font-medium capitalize border-slate-200 hover:border-blue-300 text-slate-600" data-val="female">Female</button>
+                        </div>
+                    </div>
+
+                    <!-- Background -->
+                    <div class="mb-6">
+                        <label class="text-xs font-bold uppercase text-slate-500 mb-2 block">2. Background</label>
+                        <div class="flex gap-3">
+                            <button onclick="app.setConfig('bg', 'white')" class="btn-bg flex-1 h-12 rounded-xl border-2 flex items-center justify-center bg-white border-slate-200 ring-2 ring-offset-2 ring-blue-500" data-val="white">
+                                <i data-lucide="check" class="w-5 h-5 text-slate-800"></i>
+                            </button>
+                            <button onclick="app.setConfig('bg', 'blue')" class="btn-bg flex-1 h-12 rounded-xl border-2 flex items-center justify-center bg-blue-600 border-blue-600 opacity-70 hover:opacity-100" data-val="blue"></button>
+                            <button onclick="app.setConfig('bg', 'red')" class="btn-bg flex-1 h-12 rounded-xl border-2 flex items-center justify-center bg-red-600 border-red-600 opacity-70 hover:opacity-100" data-val="red"></button>
+                        </div>
+                    </div>
+
+                    <!-- Attire -->
+                    <div class="mb-8">
+                        <label class="text-xs font-bold uppercase text-slate-500 mb-2 block">3. Attire Style</label>
+                        <div class="grid grid-cols-2 gap-2 mb-3">
+                            <button onclick="app.setConfig('attire', 'default')" class="btn-attire py-2 px-3 text-sm rounded-lg border bg-slate-800 text-white border-slate-800" data-val="default">Standard Suit</button>
+                            <button onclick="app.setConfig('attire', 'formal')" class="btn-attire py-2 px-3 text-sm rounded-lg border bg-white border-slate-200 hover:bg-slate-50" data-val="formal">Formal/Black</button>
+                            <button onclick="app.setConfig('attire', 'medical')" class="btn-attire py-2 px-3 text-sm rounded-lg border bg-white border-slate-200 hover:bg-slate-50" data-val="medical">Medical Coat</button>
+                            <button onclick="app.setConfig('attire', 'casual')" class="btn-attire py-2 px-3 text-sm rounded-lg border bg-white border-slate-200 hover:bg-slate-50" data-val="casual">Smart Casual</button>
+                        </div>
+                    </div>
+
+                    <button id="btn-generate" onclick="app.generateIDPhoto()" class="w-full py-4 px-6 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 transition-all">
+                        <i data-lucide="refresh-cw" class="w-5 h-5"></i> Generate Photos
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 4: Print & Edit -->
+        <section id="view-print" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+            <!-- Left: Controls -->
+            <div class="lg:col-span-1 space-y-6">
+                
+                <!-- Paper Size -->
+                <div class="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+                    <h3 class="text-sm uppercase tracking-wider font-bold text-slate-400 mb-4 flex items-center gap-2">
+                        <i data-lucide="layers" class="w-4 h-4"></i> Paper Size
+                    </h3>
+                    <div class="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                        <button onclick="app.setEdit('paper', '5R')" class="btn-paper flex-1 py-2 text-sm font-medium rounded-lg bg-white shadow text-blue-600" data-val="5R">5R</button>
+                        <button onclick="app.setEdit('paper', 'A4')" class="btn-paper flex-1 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-slate-700" data-val="A4">A4</button>
+                    </div>
+                    <p id="paper-label" class="text-xs text-center mt-2 text-slate-400">5R (5" x 7")</p>
+                </div>
+
+                <!-- Adjustments -->
+                <div class="bg-white rounded-2xl shadow-md p-6 border border-slate-100">
+                    <h3 class="text-sm uppercase tracking-wider font-bold text-slate-400 mb-4 flex items-center gap-2">
+                        <i data-lucide="sliders" class="w-4 h-4"></i> Adjustments
+                    </h3>
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-600 mb-1"><span>Brightness</span><span id="val-brightness">100%</span></div>
+                            <input type="range" id="slider-brightness" min="80" max="120" value="100" class="range-slider w-full h-1.5 bg-slate-200 rounded-lg appearance-none" oninput="app.handleSliderChange()">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs font-medium text-slate-600 mb-1"><span>Contrast</span><span id="val-contrast">100%</span></div>
+                            <input type="range" id="slider-contrast" min="80" max="120" value="100" class="range-slider w-full h-1.5 bg-slate-200 rounded-lg appearance-none" oninput="app.handleSliderChange()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="space-y-3">
+                    <button onclick="app.downloadSheet()" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl hover:bg-blue-700 shadow-lg flex items-center justify-center gap-2 transition-transform active:scale-95">
+                        <i data-lucide="download" class="w-5 h-5"></i> Download Printable Sheet
+                    </button>
+                    <button onclick="app.downloadDigital()" class="w-full bg-white text-slate-700 font-bold py-3.5 rounded-xl border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex items-center justify-center gap-2 transition-colors">
+                        <i data-lucide="image" class="w-5 h-5"></i> Download Digital Copy
+                    </button>
+                    <button onclick="app.reset()" class="w-full text-sm text-slate-400 hover:text-red-500 py-2">Start Over</button>
+                </div>
+            </div>
+
+            <!-- Right: Preview -->
+            <div class="lg:col-span-2">
+                <div class="bg-slate-200 rounded-2xl p-4 overflow-auto shadow-inner h-[700px] flex justify-center items-start">
+                    <!-- Canvas Container -->
+                    <div id="preview-wrapper" class="bg-white shadow-2xl relative transition-all duration-300" style="width: 400px; min-height: 560px;">
+                        <div id="loading-preview" class="absolute inset-0 flex items-center justify-center text-slate-300 hidden">Generating Preview...</div>
+                        <img id="sheet-preview" src="" alt="Preview" class="w-full h-auto relative z-10 block">
+                    </div>
+                </div>
+                <p class="text-center text-xs text-slate-400 mt-2">Showing Preview @ 300 DPI</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Hidden Canvases -->
+    <canvas id="crop-canvas" class="hidden"></canvas>
+    <canvas id="sheet-canvas" class="hidden"></canvas>
+    <canvas id="digital-canvas" class="hidden"></canvas>
+
+    <!-- JS Logic -->
+    <script>
+        // --- Constants ---
+        const SIZES = {
+            '5R': { width: 1500, height: 2100, label: '5R (5" x 7")' },
+            'A4': { width: 3508, height: 2480, label: 'A4 Landscape (11.7" x 8.3")' }
+        };
+        const ID_2X2 = 600;
+        const ID_1X1 = 300;
+
+        // --- App State & Logic ---
+        const app = {
+            state: {
+                userApiKey: '',
+                step: 0, // 0 is login
+                originalImage: null,
+                croppedImage: null,
+                processedImage: null,
+                isProcessing: false,
+                
+                // Crop State
+                crop: { x: 0, y: 0, zoom: 1, dragStart: null },
+                
+                // Config
+                config: { gender: 'male', bg: 'white', attire: 'default' },
+                
+                // Edit
+                edit: { paper: '5R', brightness: 100, contrast: 100 }
+            },
+
+            // --- Initialization ---
+            init: function() {
+                // Check for stored API key
+                const storedKey = localStorage.getItem('gemini_api_key');
+                if (storedKey) {
+                    this.state.userApiKey = storedKey;
+                    this.goToStep(1);
+                } else {
+                    this.goToStep(0); // Show login
+                }
+
+                // Login Enter Key
+                document.getElementById('api-key-input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.login();
+                });
+
+                // Step 1: Upload
+                const dropZone = document.getElementById('drop-zone');
+                const fileInput = document.getElementById('file-input');
+
+                dropZone.addEventListener('click', () => fileInput.click());
+                dropZone.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+                dropZone.addEventListener('drop', (e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    if(e.dataTransfer.files[0]) this.processFile(e.dataTransfer.files[0]);
+                });
+                fileInput.addEventListener('change', (e) => {
+                    if(e.target.files[0]) this.processFile(e.target.files[0]);
+                });
+
+                // Crop Listeners
+                const cropContainer = document.getElementById('crop-container');
+                cropContainer.addEventListener('mousedown', this.handleMouseDown.bind(this));
+                document.addEventListener('mousemove', this.handleMouseMove.bind(this));
+                document.addEventListener('mouseup', this.handleMouseUp.bind(this));
+                
+                // Touch
+                cropContainer.addEventListener('touchstart', this.handleTouchStart.bind(this), {passive: false});
+                document.addEventListener('touchmove', this.handleTouchMove.bind(this), {passive: false});
+                document.addEventListener('touchend', this.handleMouseUp.bind(this));
+
+                // Zoom Slider
+                document.getElementById('zoom-slider').addEventListener('input', (e) => {
+                    this.state.crop.zoom = parseFloat(e.target.value);
+                    this.updateCropTransform();
+                });
+
+                // Initial Icons
+                lucide.createIcons();
+            },
+
+            // --- Login Logic ---
+            login: function() {
+                const input = document.getElementById('api-key-input');
+                const key = input.value.trim();
+                
+                if (!key) {
+                    alert("Please enter a valid API Key");
+                    return;
+                }
+                
+                // Save key and proceed
+                localStorage.setItem('gemini_api_key', key);
+                this.state.userApiKey = key;
+                this.goToStep(1);
+            },
+
+            logout: function() {
+                localStorage.removeItem('gemini_api_key');
+                this.state.userApiKey = '';
+                document.getElementById('api-key-input').value = '';
+                this.reset(); // Resets state
+                this.goToStep(0); // Go back to login
+            },
+
+            // --- Step Management ---
+            goToStep: function(step) {
+                this.state.step = step;
+                
+                // Hide all views
+                ['view-login', 'view-upload', 'view-crop', 'view-config', 'view-print'].forEach(id => {
+                    document.getElementById(id).classList.add('hidden');
+                });
+                
+                // Show active view
+                const views = ['view-login', 'view-upload', 'view-crop', 'view-config', 'view-print']; 
+                // Mapping: 0->login, 1->upload, 1.5->crop, 2->config, 3->print
+                let viewId;
+                if (step === 0) viewId = 'view-login';
+                else if (step === 1) viewId = 'view-upload';
+                else if (step === 1.5) viewId = 'view-crop';
+                else if (step === 2) viewId = 'view-config';
+                else if (step === 3) viewId = 'view-print';
+                
+                document.getElementById(viewId).classList.remove('hidden');
+
+                // Update Navbar Visibility
+                const navSteps = document.getElementById('step-indicator');
+                const logoutBtn = document.getElementById('btn-logout');
+                
+                if (step === 0) {
+                    navSteps.classList.add('hidden');
+                    logoutBtn.classList.add('hidden');
+                } else {
+                    navSteps.classList.remove('hidden');
+                    logoutBtn.classList.remove('hidden');
+                    
+                    // Update Active State
+                    const steps = [1, 1.5, 2, 3];
+                    steps.forEach((s, idx) => {
+                        const el = document.getElementById(`nav-step-${idx+1}`);
+                        if (el) {
+                            if (step >= s) {
+                                el.classList.remove('step-inactive');
+                                el.classList.add('step-active');
+                            } else {
+                                el.classList.remove('step-active');
+                                el.classList.add('step-inactive');
+                            }
+                        }
+                    });
+                }
+
+                // Step specific logic
+                if (step === 3) this.renderSheet();
+            },
+
+            processFile: function(file) {
+                if (!file.type.startsWith('image/')) {
+                    alert('Please upload an image file.');
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    this.state.originalImage = e.target.result;
+                    document.getElementById('crop-image').src = e.target.result;
+                    
+                    // Reset Crop State
+                    this.state.crop = { x: 0, y: 0, zoom: 1, dragStart: null };
+                    document.getElementById('zoom-slider').value = 1;
+                    this.updateCropTransform();
+                    
+                    this.goToStep(1.5);
+                };
+                reader.readAsDataURL(file);
+            },
+
+            // --- Cropper Logic ---
+            updateCropTransform: function() {
+                const img = document.getElementById('crop-image');
+                const { x, y, zoom } = this.state.crop;
+                img.style.top = '50%';
+                img.style.left = '50%';
+                img.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${zoom})`;
+                img.style.minWidth = '100%';
+                img.style.minHeight = '100%';
+            },
+
+            handleMouseDown: function(e) {
+                this.state.crop.dragStart = { 
+                    x: e.clientX - this.state.crop.x, 
+                    y: e.clientY - this.state.crop.y 
+                };
+            },
+            handleMouseMove: function(e) {
+                if (!this.state.crop.dragStart) return;
+                e.preventDefault();
+                this.state.crop.x = e.clientX - this.state.crop.dragStart.x;
+                this.state.crop.y = e.clientY - this.state.crop.dragStart.y;
+                this.updateCropTransform();
+            },
+            handleMouseUp: function() {
+                this.state.crop.dragStart = null;
+            },
+            // Touch Handlers
+            handleTouchStart: function(e) {
+                e.preventDefault(); // Prevent scroll
+                const touch = e.touches[0];
+                this.state.crop.dragStart = { 
+                    x: touch.clientX - this.state.crop.x, 
+                    y: touch.clientY - this.state.crop.y 
+                };
+            },
+            handleTouchMove: function(e) {
+                if (!this.state.crop.dragStart) return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                this.state.crop.x = touch.clientX - this.state.crop.dragStart.x;
+                this.state.crop.y = touch.clientY - this.state.crop.dragStart.y;
+                this.updateCropTransform();
+            },
+
+            confirmCrop: function() {
+                const img = document.getElementById('crop-image');
+                const canvas = document.getElementById('crop-canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Visual Bounding Box Method
+                const containerRect = img.parentElement.getBoundingClientRect();
+                const imageRect = img.getBoundingClientRect();
+                
+                // High Quality Output
+                const outputSize = 800; 
+                canvas.width = outputSize;
+                canvas.height = outputSize;
+                
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, outputSize, outputSize);
+                
+                // Map screen pixels to canvas pixels
+                const ratio = outputSize / containerRect.width;
+                
+                const x = (imageRect.left - containerRect.left) * ratio;
+                const y = (imageRect.top - containerRect.top) * ratio;
+                const width = imageRect.width * ratio;
+                const height = imageRect.height * ratio;
+                
+                // Draw exact visual state
+                ctx.drawImage(img, x - 1, y - 1, width + 2, height + 2);
+                
+                this.state.croppedImage = canvas.toDataURL('image/jpeg', 0.95);
+                document.getElementById('cropped-preview').src = this.state.croppedImage;
+                this.goToStep(2);
+            },
+
+            // --- Configuration Logic ---
+            setConfig: function(key, value) {
+                this.state.config[key] = value;
+                
+                // Update UI Buttons
+                const buttons = document.querySelectorAll(`.btn-${key}`);
+                buttons.forEach(btn => {
+                    const isSelected = btn.dataset.val === value;
+                    if (key === 'gender') {
+                        btn.className = isSelected 
+                            ? "btn-gender flex-1 py-3 rounded-xl border-2 font-medium capitalize border-blue-500 bg-blue-50 text-blue-700"
+                            : "btn-gender flex-1 py-3 rounded-xl border-2 font-medium capitalize border-slate-200 hover:border-blue-300 text-slate-600";
+                    } else if (key === 'bg') {
+                        // Reset base classes then add selected state
+                        if (isSelected) {
+                            btn.innerHTML = '<i data-lucide="check" class="w-5 h-5 ' + (value==='white'?'text-slate-800':'text-white') + '"></i>';
+                            btn.classList.remove('opacity-70');
+                            btn.classList.add('ring-2', 'ring-offset-2', 'ring-blue-500', 'scale-105');
+                        } else {
+                            btn.innerHTML = '';
+                            btn.classList.add('opacity-70');
+                            btn.classList.remove('ring-2', 'ring-offset-2', 'ring-blue-500', 'scale-105');
+                        }
+                        lucide.createIcons();
+                    } else if (key === 'attire') {
+                        btn.className = isSelected
+                            ? "btn-attire py-2 px-3 text-sm rounded-lg border bg-slate-800 text-white border-slate-800"
+                            : "btn-attire py-2 px-3 text-sm rounded-lg border bg-white border-slate-200 hover:bg-slate-50";
+                    }
+                });
+            },
+
+            // --- API Logic ---
+            generateIDPhoto: async function() {
+                if (!this.state.croppedImage) return;
+                
+                const btn = document.getElementById('btn-generate');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = `<i data-lucide="refresh-cw" class="w-5 h-5 animate-spin"></i> Processing...`;
+                lucide.createIcons();
+
+                try {
+                    const base64Data = this.state.croppedImage.split(',')[1];
+                    const { gender, bg, attire } = this.state.config;
+                    
+                    let attireDesc = "";
+                    if (gender === 'male') {
+                        if (attire === 'formal') attireDesc = "black formal tuxedo with a bow tie";
+                        else if (attire === 'medical') attireDesc = "white medical doctor's coat with a shirt and tie underneath";
+                        else if (attire === 'casual') attireDesc = "smart casual collared button-down shirt";
+                        else attireDesc = "dark navy blue formal business suit with a white collared shirt and tie";
+                    } else {
+                        if (attire === 'formal') attireDesc = "elegant black evening formal blouse";
+                        else if (attire === 'medical') attireDesc = "white medical doctor's coat";
+                        else if (attire === 'casual') attireDesc = "smart casual blouse";
+                        else attireDesc = "black formal business blazer with a white inner blouse";
+                    }
+
+                    const colorDesc = bg === 'white' ? 'pure white' : bg === 'blue' ? 'royal blue' : 'red';
+
+                    const promptText = `
+                        Act as a professional photo studio editor. Process this ID photo:
+                        1. BACKGROUND: Change background to a clean, solid ${colorDesc}.
+                        2. ATTIRE: Change clothing to a ${attireDesc}.
+                        3. ENHANCEMENT: Apply "studio finish":
+                        - Smooth skin tone/texture subtly.
+                        - Softbox lighting (no harsh shadows).
+                        - Fix white balance/color for a vibrant look.
+                        - Sharpen eyes.
+                        4. IDENTITY: CRITICAL. Do NOT alter facial structure or identity.
+                        5. COMPOSITION: MAINTAIN existing square framing. Do not zoom.
+                    `;
+
+                    const payload = {
+                        contents: [{
+                            parts: [{ text: promptText }, { inlineData: { mimeType: "image/jpeg", data: base64Data } }]
+                        }],
+                        generationConfig: { responseModalities: ["TEXT", "IMAGE"] }
+                    };
+
+                    // Use the user's stored API key
+                    const userKey = this.state.userApiKey;
+
+                    const response = await fetch(
+                        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${userKey}`,
+                        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }
+                    );
+
+                    if (response.status === 401 || response.status === 403) {
+                        this.logout(); // Force re-login
+                        throw new Error("Invalid API Key. Please log in again.");
+                    }
+                    if (!response.ok) throw new Error("API Error: " + response.status);
+                    
+                    const data = await response.json();
+                    const generatedBase64 = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                    if (generatedBase64) {
+                        this.state.processedImage = `data:image/jpeg;base64,${generatedBase64}`;
+                        this.goToStep(3);
+                    } else {
+                        alert('AI did not return an image. Please try again.');
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    alert(err.message || "Failed to process image.");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerHTML = originalText;
+                    lucide.createIcons();
+                }
+            },
+
+            // --- Editing & Printing Logic ---
+            setEdit: function(key, value) {
+                this.state.edit[key] = value;
+                if (key === 'paper') {
+                    // Update UI Buttons
+                    const buttons = document.querySelectorAll('.btn-paper');
+                    buttons.forEach(btn => {
+                        const isSelected = btn.dataset.val === value;
+                        btn.className = isSelected 
+                            ? "btn-paper flex-1 py-2 text-sm font-medium rounded-lg bg-white shadow text-blue-600"
+                            : "btn-paper flex-1 py-2 text-sm font-medium rounded-lg text-slate-500 hover:text-slate-700";
+                    });
+                    document.getElementById('paper-label').innerText = SIZES[value].label;
+                    
+                    // Adjust Preview Container Aspect Ratio
+                    const wrapper = document.getElementById('preview-wrapper');
+                    if (value === 'A4') wrapper.style.width = '500px';
+                    else wrapper.style.width = '400px';
+                }
+                this.renderSheet();
+            },
+
+            handleSliderChange: function() {
+                this.state.edit.brightness = document.getElementById('slider-brightness').value;
+                this.state.edit.contrast = document.getElementById('slider-contrast').value;
+                document.getElementById('val-brightness').innerText = this.state.edit.brightness + '%';
+                document.getElementById('val-contrast').innerText = this.state.edit.contrast + '%';
+                this.renderSheet();
+            },
+
+            renderSheet: function() {
+                if (!this.state.processedImage) return;
+
+                const canvas = document.getElementById('sheet-canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                
+                img.onload = () => {
+                    const { paper, brightness, contrast } = this.state.edit;
+                    const size = SIZES[paper];
+                    
+                    canvas.width = size.width;
+                    canvas.height = size.height;
+                    
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, size.width, size.height);
+
+                    const drawImg = (x, y, w) => {
+                        ctx.save();
+                        ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+                        ctx.drawImage(img, 0, 0, img.width, img.height, x, y, w, w);
+                        ctx.restore();
+                        ctx.strokeStyle = '#cbd5e1';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x, y, w, w);
+                    };
+
+                    const spacing = 30;
+                    
+                    // Calculate Layout
+                    const w2x2 = (ID_2X2 * 2) + spacing;
+                    const w1x1 = (ID_1X1 * 4) + (spacing * 3);
+                    
+                    let startX2x2, startX1x1;
+
+                    if (paper === 'A4') {
+                        // A4 Landscape Left Half Logic
+                        const halfWidth = size.width / 2;
+                        startX2x2 = (halfWidth - w2x2) / 2;
+                        startX1x1 = (halfWidth - w1x1) / 2;
+                        
+                        // Guide Line
+                        ctx.beginPath();
+                        ctx.moveTo(halfWidth, 0);
+                        ctx.lineTo(halfWidth, size.height);
+                        ctx.strokeStyle = '#e2e8f0';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([20, 20]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    } else {
+                        // 5R Centered
+                        startX2x2 = (size.width - w2x2) / 2;
+                        startX1x1 = (size.width - w1x1) / 2;
+                    }
+
+                    const totalH = (ID_2X2 * 2) + spacing + 60 + (ID_1X1 * 2) + spacing;
+                    let y = (size.height - totalH) / 2;
+
+                    // Row 1: 2x2
+                    drawImg(startX2x2, y, ID_2X2);
+                    drawImg(startX2x2 + ID_2X2 + spacing, y, ID_2X2);
+                    y += ID_2X2 + spacing;
+
+                    // Row 2: 2x2
+                    drawImg(startX2x2, y, ID_2X2);
+                    drawImg(startX2x2 + ID_2X2 + spacing, y, ID_2X2);
+                    y += ID_2X2 + 60;
+
+                    // Rows 3 & 4: 1x1
+                    for (let r=0; r<2; r++) {
+                        for (let c=0; c<4; c++) {
+                            drawImg(startX1x1 + (c * (ID_1X1 + spacing)), y, ID_1X1);
+                        }
+                        y += ID_1X1 + spacing;
+                    }
+
+                    // Update Preview Image
+                    document.getElementById('sheet-preview').src = canvas.toDataURL('image/jpeg', 0.8);
+                };
+                img.src = this.state.processedImage;
+            },
+
+            // --- Downloads ---
+            downloadSheet: function() {
+                const link = document.createElement('a');
+                link.download = `ID-Sheet-${this.state.edit.paper}.jpg`;
+                link.href = document.getElementById('sheet-canvas').toDataURL('image/jpeg', 1.0);
+                link.click();
+            },
+
+            downloadDigital: function() {
+                const canvas = document.getElementById('digital-canvas');
+                const ctx = canvas.getContext('2d');
+                const img = new Image();
+                img.onload = () => {
+                    canvas.width = 800;
+                    canvas.height = 800;
+                    
+                    // Fill BG Color to be safe
+                    const bgMap = { 'white': '#ffffff', 'blue': '#2563eb', 'red': '#dc2626' };
+                    ctx.fillStyle = bgMap[this.state.config.bg] || '#ffffff';
+                    ctx.fillRect(0,0,800,800);
+
+                    const { brightness, contrast } = this.state.edit;
+                    ctx.filter = `brightness(${brightness}%) contrast(${contrast}%)`;
+                    ctx.drawImage(img, 0, 0, 800, 800);
+                    
+                    const link = document.createElement('a');
+                    link.download = 'ID-Digital-Copy.jpg';
+                    link.href = canvas.toDataURL('image/jpeg', 0.95);
+                    link.click();
+                };
+                img.src = this.state.processedImage;
+            },
+
+            reset: function() {
+                location.reload();
+            }
+        };
+
+        // Start App
+        window.onload = () => app.init();
+
+    </script>
+</body>
+</html>
