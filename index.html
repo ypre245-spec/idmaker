@@ -257,7 +257,13 @@
             login: function() {
                 const input = document.getElementById('api-key-input');
                 const key = input.value.trim();
-                if (!key || !key.startsWith('AIza')) { alert("Invalid API Key format. It should start with 'AIza'."); return; }
+                
+                if (!key) {
+                    alert("Please enter an API Key.");
+                    return;
+                }
+                
+                // Removed strict 'AIza' check to allow other key formats if valid
                 localStorage.setItem('gemini_api_key', key);
                 this.state.userApiKey = key;
                 this.goToStep(1);
